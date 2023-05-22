@@ -1,0 +1,13 @@
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace OBSAutomaticSceneSwitcher;
+
+public class DatabaseContext : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.UseSqlite("Data Source=obsAutomaticsSceneSwitcher.db");
+    }
+
+    public DbSet<WindowToScene> WindowToScenes { get; set; }
+}
