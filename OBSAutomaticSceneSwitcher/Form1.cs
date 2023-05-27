@@ -7,15 +7,14 @@ namespace OBSAutomaticSceneSwitcher;
 
 public partial class Form1 : Form
 {
-    private OBSWebsocket obs;
-    private readonly WindowsService _ws;
     private readonly DatabaseContext _dbContext;
+    private readonly OBSWebsocket obs;
+    private readonly WindowsService _ws;
 
     public Form1()
     {
         InitializeComponent();
 
-        _ws = new();
         _dbContext = new();
         _dbContext.Database.EnsureCreated();
 
@@ -24,44 +23,20 @@ public partial class Form1 : Form
         obs.SceneCreated += Obs_SceneCreated;
         obs.SceneRemoved += Obs_SceneRemoved;
 
+        _ws = new();
+
         Load += Form1_Load;
     }
 
     private void Form1_Load(object? sender, EventArgs e)
     {
+        mapTypeComboBox.DataSource = Enum.GetNames(typeof(MapType)).ToList();
         LoadWindowList();
         LoadMapList();
         WatchWindows();
     }
 
-    private void WatchWindows()
-    {
-        Task.Run(() =>
-        {
-            BeginInvoke(async () =>
-            {
-                while (true)
-                {
-                    if (obs.IsConnected)
-                    {
-                        List<WindowToScene> windowToScenes = await _dbContext.WindowToScenes.ToListAsync();
-                        string window = _ws.GetCurrentWindow();
-                        WindowToScene? windowToScene = windowToScenes.FirstOrDefault(x => window.Contains(x.WindowSearch));
-                        if (windowToScene is not null)
-                        {
-                            if (obs.GetCurrentProgramScene() != windowToScene.SceneName)
-                            {
-                                obs.SetCurrentProgramScene(windowToScene.SceneName);
-                            }
-                        }
-                    }
-                    await Task.Delay(1000);
-                }
-            });
-        }).SafeFireAndForget();
-    }
-
-    private void Obs_SceneRemoved(object? sender, OBSWebsocketDotNet.Types.Events.SceneRemovedEventArgs e)
+    private void Obs_Connected(object? sender, EventArgs e)
     {
         BeginInvoke(UpdateScenes);
     }
@@ -71,7 +46,7 @@ public partial class Form1 : Form
         BeginInvoke(UpdateScenes);
     }
 
-    private void Obs_Connected(object? sender, EventArgs e)
+    private void Obs_SceneRemoved(object? sender, OBSWebsocketDotNet.Types.Events.SceneRemovedEventArgs e)
     {
         BeginInvoke(UpdateScenes);
     }
@@ -79,7 +54,7 @@ public partial class Form1 : Form
     private void LoadWindowList()
     {
         Dictionary<IntPtr, string> windowsDict = _ws.GetWindows();
-        comboBox2.DataSource = windowsDict.Values.OrderBy(x => x).ToList();
+        windowsComboBox.DataSource = windowsDict.Values.OrderBy(x => x).ToList();
     }
 
     private void LoadMapList()
@@ -105,7 +80,84 @@ public partial class Form1 : Form
             DataPropertyName = "SceneName",
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
         });
+        dataGridView1.Columns.Add(new DataGridViewTextBoxColumn()
+        {
+            HeaderText = "Map Type",
+            DataPropertyName = "MapType",
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
+        });
         dataGridView1.DataSource = windowScenes;
+    }
+
+    private void WatchWindows()
+    {
+        Task.Run(() =>
+        {
+            BeginInvoke(async () =>
+            {
+                while (true)
+                {
+                    if (obs.IsConnected)
+                    {
+                        List<WindowToScene> windowToScenes = await _dbContext.WindowToScenes.ToListAsync();
+                        string window = _ws.GetCurrentWindow();
+                        WindowToScene? windowToScene = windowToScenes.FirstOrDefault(x => window.Contains(x.WindowSearch, StringComparison.CurrentCultureIgnoreCase));
+                        if (windowToScene is not null)
+                        {
+                            if (windowToScene.MapType == MapType.Scene)
+                            {
+                                if (obs.GetCurrentProgramScene() != windowToScene.SceneName)
+                                {
+                                    obs.SetCurrentProgramScene(windowToScene.SceneName);
+                                }
+                            }
+                            else
+                            {
+                                string currentSceneName = obs.GetCurrentProgramScene();
+                                List<SceneItemDetails> sceneItems = obs.GetSceneItemList(currentSceneName);
+                                SceneItemDetails? source = sceneItems.FirstOrDefault(x => x.SourceName == windowToScene.SceneName);
+                                if (source is not null)
+                                {
+                                    foreach (SceneItemDetails item in sceneItems)
+                                    {
+                                        if (item.ItemId == source.ItemId)
+                                        {
+                                            bool isEnabled = obs.GetSceneItemEnabled(currentSceneName, item.ItemId);
+                                            if (!isEnabled)
+                                            {
+                                                obs.SetSceneItemEnabled(currentSceneName, source.ItemId, true);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            bool isEnabled = obs.GetSceneItemEnabled(currentSceneName, item.ItemId);
+                                            if (isEnabled)
+                                            {
+                                                obs.SetSceneItemEnabled(currentSceneName, item.ItemId, false);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    await Task.Delay(1000);
+                }
+            });
+        }).SafeFireAndForget();
+    }
+
+    private void LoadSources(string sceneName)
+    {
+        GetSceneListInfo scenes = obs.GetSceneList();
+        foreach (var scene in scenes.Scenes)
+        {
+            if (scene.Name == sceneName)
+            {
+                List<SceneItemDetails> sceneItems = obs.GetSceneItemList(scene.Name);
+                sourcesComboBox.DataSource = sceneItems;
+            }
+        }
     }
 
     private void UpdateScenes()
@@ -113,18 +165,18 @@ public partial class Form1 : Form
         if (obs.IsConnected)
         {
             GetSceneListInfo scenes = obs.GetSceneList();
-            comboBox1.DataSource = scenes.Scenes;
+            scenesComboBox.DataSource = scenes.Scenes;
         }
     }
 
-    private void button1_Click(object sender, EventArgs e)
+    private void connectButton_Click(object sender, EventArgs e)
     {
         BeginInvoke(() =>
         {
             try
             {
-                obs.ConnectAsync(textBox1.Text, textBox2.Text);
-                comboBox1.Enabled = true;
+                obs.ConnectAsync(addressTextBox.Text, passwordTextBox.Text);
+                scenesComboBox.Enabled = true;
             }
             catch (Exception ex)
             {
@@ -133,28 +185,51 @@ public partial class Form1 : Form
         });
     }
 
-    private void button2_Click(object sender, EventArgs e)
+    private void reloadWindowsButton_Click(object sender, EventArgs e)
     {
         LoadWindowList();
     }
 
-    private void button3_Click(object sender, EventArgs e)
+    private void saveMapButton_Click(object sender, EventArgs e)
     {
-        SceneBasicInfo? a = (SceneBasicInfo)comboBox1.SelectedItem;
-        string? b = comboBox2.SelectedItem?.ToString();
-        if (a is not null && b is not null)
+        string windowSearch;
+        if (freeFormCheckBox.Checked)
+        {
+            windowSearch = freeFormTextBox.Text;
+        }
+        else
+        {
+            windowSearch = windowsComboBox.SelectedItem?.ToString() ?? "";
+        }
+
+        MapType mapType = (MapType)Enum.Parse(typeof(MapType), mapTypeComboBox.SelectedItem.ToString());
+
+        string sceneOrSourceName;
+        if (mapType == MapType.Scene)
+        {
+            SceneBasicInfo sceneBasicInfo = (SceneBasicInfo)scenesComboBox.SelectedItem;
+            sceneOrSourceName = sceneBasicInfo.Name;
+        }
+        else
+        {
+            SceneItemDetails sceneItemDetails = (SceneItemDetails)sourcesComboBox.SelectedItem;
+            sceneOrSourceName = sceneItemDetails.SourceName;
+        }
+
+        if (!string.IsNullOrEmpty(windowSearch) && !string.IsNullOrEmpty(sceneOrSourceName))
         {
             _dbContext.WindowToScenes.Add(new()
             {
-                WindowSearch = b,
-                SceneName = a.Name
+                WindowSearch = windowSearch,
+                MapType = mapType,
+                SceneName = sceneOrSourceName
             });
             _dbContext.SaveChanges();
             LoadMapList();
         }
     }
 
-    private void button4_Click(object sender, EventArgs e)
+    private void deleteMapButton_Click(object sender, EventArgs e)
     {
         foreach (DataGridViewRow selectedRow in dataGridView1.SelectedRows)
         {
@@ -164,5 +239,52 @@ public partial class Form1 : Form
 
         _dbContext.SaveChanges();
         LoadMapList();
+    }
+
+    private void scenesComboBox_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        SceneBasicInfo scene = (SceneBasicInfo)scenesComboBox.SelectedItem;
+        BeginInvoke(() => LoadSources(scene.Name));
+    }
+
+    private void mapTypeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        MapType mapType = (MapType)Enum.Parse(typeof(MapType), mapTypeComboBox.SelectedItem.ToString());
+        if (mapType == MapType.Scene)
+        {
+            sourcesComboBox.Enabled = false;
+            scenesComboBox.SelectedIndexChanged -= scenesComboBox_SelectedIndexChanged;
+        }
+        else
+        {
+            sourcesComboBox.Enabled = true;
+            scenesComboBox.SelectedIndexChanged += scenesComboBox_SelectedIndexChanged;
+        }
+    }
+
+    private void freeFormCheckBox_CheckedChanged(object sender, EventArgs e)
+    {
+        if (freeFormCheckBox.Checked)
+        {
+            windowsComboBox.Visible = false;
+            windowsComboBox.Enabled = false;
+            freeFormTextBox.Visible = true;
+            freeFormTextBox.Enabled = true;
+        }
+        else
+        {
+            windowsComboBox.Visible = true;
+            windowsComboBox.Enabled = true;
+            freeFormTextBox.Visible = false;
+            freeFormTextBox.Enabled = false;
+        }
+    }
+
+    private void button1_Click(object sender, EventArgs e)
+    {
+        SceneBasicInfo scene = (SceneBasicInfo)scenesComboBox.SelectedItem;
+        BeginInvoke(() => LoadSources(scene.Name));
+        sourcesComboBox.Enabled = true;
+
     }
 }
