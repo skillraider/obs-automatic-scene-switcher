@@ -200,7 +200,7 @@
             // label5
             // 
             label5.AutoSize = true;
-            label5.Location = new Point(14, 136);
+            label5.Location = new Point(10, 136);
             label5.Name = "label5";
             label5.Size = new Size(58, 15);
             label5.TabIndex = 18;
@@ -241,7 +241,7 @@
             button1.Name = "button1";
             button1.Size = new Size(125, 23);
             button1.TabIndex = 22;
-            button1.Text = "Reload Scene Items";
+            button1.Text = "Reload Scene List";
             button1.UseVisualStyleBackColor = true;
             button1.Click += button1_Click;
             // 

@@ -30,7 +30,15 @@ public partial class Form1 : Form
 
     private void Form1_Load(object? sender, EventArgs e)
     {
+        ConnectionSettings? connectionSettings = _dbContext.ConnectionSettings.FirstOrDefault();
+        if (connectionSettings is not null)
+        {
+            addressTextBox.Text = connectionSettings.IpPort;
+            passwordTextBox.Text = connectionSettings.Password;
+        }
+
         mapTypeComboBox.DataSource = Enum.GetNames(typeof(MapType)).ToList();
+
         LoadWindowList();
         LoadMapList();
         WatchWindows();
@@ -39,6 +47,7 @@ public partial class Form1 : Form
     private void Obs_Connected(object? sender, EventArgs e)
     {
         BeginInvoke(UpdateScenes);
+        SaveConnectionSettings();
     }
 
     private void Obs_SceneCreated(object? sender, OBSWebsocketDotNet.Types.Events.SceneCreatedEventArgs e)
@@ -49,6 +58,20 @@ public partial class Form1 : Form
     private void Obs_SceneRemoved(object? sender, OBSWebsocketDotNet.Types.Events.SceneRemovedEventArgs e)
     {
         BeginInvoke(UpdateScenes);
+    }
+
+    private void SaveConnectionSettings()
+    {
+        ConnectionSettings? connectionSettings = _dbContext.ConnectionSettings.FirstOrDefault();
+        if (connectionSettings is null)
+        {
+            connectionSettings = new();
+        }
+
+        connectionSettings.IpPort = addressTextBox.Text;
+        connectionSettings.Password = passwordTextBox.Text;
+        _dbContext.ConnectionSettings.Update(connectionSettings);
+        _dbContext.SaveChanges();
     }
 
     private void LoadWindowList()

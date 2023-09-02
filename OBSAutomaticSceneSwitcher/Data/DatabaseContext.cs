@@ -10,4 +10,6 @@ public class DatabaseContext : DbContext
     }
 
     public DbSet<WindowToScene> WindowToScenes { get; set; }
+
+    public DbSet<ConnectionSettings> ConnectionSettings { get; set; }
 }
