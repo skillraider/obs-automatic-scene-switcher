@@ -17,6 +17,7 @@ public partial class Form1 : Form
 
         _dbContext = new();
         _dbContext.Database.EnsureCreated();
+        _dbContext.Database.Migrate();
 
         obs = new();
         obs.Connected += Obs_Connected;
