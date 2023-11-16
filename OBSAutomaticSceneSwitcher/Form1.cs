@@ -17,7 +17,11 @@ public partial class Form1 : Form
 
         _dbContext = new();
         _dbContext.Database.EnsureCreated();
-        _dbContext.Database.Migrate();
+        try
+        {
+            _dbContext.Database.Migrate();
+        }
+        catch {}
 
         obs = new();
         obs.Connected += Obs_Connected;
