@@ -1,6 +1,6 @@
 using AsyncAwaitBestPractices;
-using OBSWebsocketDotNet;
 using Microsoft.EntityFrameworkCore;
+using OBSWebsocketDotNet;
 using OBSWebsocketDotNet.Types;
 
 namespace OBSAutomaticSceneSwitcher;
@@ -10,6 +10,8 @@ public partial class Form1 : Form
     private readonly DatabaseContext _dbContext;
     private readonly OBSWebsocket obs;
     private readonly WindowsService _ws;
+
+    private bool somethingUpdated = false;
 
     public Form1()
     {
@@ -123,11 +125,16 @@ public partial class Form1 : Form
         {
             BeginInvoke(async () =>
             {
+                List<WindowToScene> windowToScenes = await _dbContext.WindowToScenes.ToListAsync();
                 while (true)
                 {
                     if (obs.IsConnected)
                     {
-                        List<WindowToScene> windowToScenes = await _dbContext.WindowToScenes.ToListAsync();
+                        if (somethingUpdated)
+                        {
+                            windowToScenes = await _dbContext.WindowToScenes.ToListAsync();
+                        }
+                        
                         string window = _ws.GetCurrentWindow();
                         WindowToScene? windowToScene = windowToScenes.FirstOrDefault(x => window.Contains(x.WindowSearch, StringComparison.CurrentCultureIgnoreCase));
                         if (windowToScene is not null)
@@ -158,6 +165,7 @@ public partial class Form1 : Form
                                         }
                                         else
                                         {
+                                            // Only disable if it is part of the list of sources setup in the mapping to be disabled
                                             bool isEnabled = obs.GetSceneItemEnabled(currentSceneName, item.ItemId);
                                             if (isEnabled)
                                             {
@@ -192,6 +200,9 @@ public partial class Form1 : Form
     {
         if (obs.IsConnected)
         {
+            somethingUpdated = true;
+            // Get Scenes from database
+            // If there is a mapping with the scene or sources within that scene that have been removed, remove or disable the mapping
             GetSceneListInfo scenes = obs.GetSceneList();
             scenesComboBox.DataSource = scenes.Scenes;
         }
@@ -217,6 +228,8 @@ public partial class Form1 : Form
     {
         LoadWindowList();
     }
+
+    // Add ability to edit mappings
 
     private void saveMapButton_Click(object sender, EventArgs e)
     {
